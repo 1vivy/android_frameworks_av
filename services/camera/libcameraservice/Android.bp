@@ -210,6 +210,8 @@ cc_library {
         "utils/LatencyHistogram.cpp",
         "utils/Utils.cpp",
         "utils/VirtualDeviceCameraIdMapper.cpp",
+        "ext/ICameraServiceExt.cpp",
+        "ext/CameraServiceExtFactory.cpp",
     ],
 
     header_libs: [
@@ -232,6 +234,7 @@ cc_library {
     include_dirs: [
         "system/media/private/camera/include",
         "frameworks/native/include/media/openmax",
+        "frameworks/av/services/camera/libcameraservice/ext/include",
     ],
 
     export_include_dirs: ["."],

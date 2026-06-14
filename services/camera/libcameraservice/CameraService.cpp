@@ -90,6 +90,8 @@
 #include "utils/TagMonitor.h"
 #include "utils/Utils.h"
 
+#include "ext/include/CameraServiceExtFactory.h"
+
 namespace {
     const char* kActivityServiceName = "activity";
     const char* kSensorPrivacyServiceName = "sensor_privacy";
@@ -4092,6 +4094,7 @@ void CameraService::logServiceError(const std::string &msg, int errorCode) {
 status_t CameraService::onTransact(uint32_t code, const Parcel& data, Parcel* reply,
         uint32_t flags) {
 
+    ALOGI("CameraService::onTransact: code=0x%x (%d)", code, code);
     // Permission checks
     switch (code) {
         case SHELL_COMMAND_TRANSACTION: {
@@ -4118,6 +4121,11 @@ status_t CameraService::onTransact(uint32_t code, const Parcel& data, Parcel* re
             }
             return NO_ERROR;
         }
+    }
+
+    // Let the extension handle it first
+    if (CameraServiceExtFactory::onTransact(code, data, reply, flags) == 0) {
+        return NO_ERROR;
     }
 
     return BnCameraService::onTransact(code, data, reply, flags);
