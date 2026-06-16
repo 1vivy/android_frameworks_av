@@ -345,6 +345,10 @@ public:
      */
     bool isAutomotiveExteriorSystemCamera(const std::string& cameraId) const;
 
+    // Returns the package name of the most-recently-connected camera client.
+    // Used to stamp the OEM SAT-Fusion identity vendor tag (com.oplus.packageName).
+    static std::string getCurrPackageName();
+
     /////////////////////////////////////////////////////////////////////
     // CameraClient functionality
 

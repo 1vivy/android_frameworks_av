@@ -2492,6 +2492,33 @@ status_t Camera3Device::configureStreamsLocked(int operatingMode,
         return BAD_VALUE;
     }
 
+#ifdef CAMERA_PACKAGE_NAME
+    // OOS-faithful SAT-Fusion identity gate: stamp the OEM client-identity vendor tag
+    // (CAMERA_PACKAGE_NAME == com.oplus.packageName) with the connecting client's package
+    // name (com.oplus.camera) so the OEM HAL selects the Fusion reprocess node. Without
+    // this the HAL falls back to the non-Fusion pipeline (customVendorTag 0 -> no ipe.ccm
+    // -> no JPEG). See memory op15infinityx-reference / sat-fusion-identity-tag.
+    sp<VendorTagDescriptor> vTags;
+    sp<VendorTagDescriptorCache> vCache = VendorTagDescriptorCache::getGlobalVendorTagCache();
+    if (vCache.get()) {
+        const camera_metadata_t *metaBuffer = sessionParams.getAndLock();
+        metadata_vendor_id_t vendorId = get_camera_metadata_vendor_id(metaBuffer);
+        sessionParams.unlock(metaBuffer);
+        vCache->getVendorTagDescriptor(vendorId, &vTags);
+        uint32_t tag;
+        if (CameraMetadata::getTagFromName(CAMERA_PACKAGE_NAME, vTags.get(), &tag)) {
+            ALOGE("%s: Unable to get %s tag", __FUNCTION__, CAMERA_PACKAGE_NAME);
+        } else {
+            std::string pkgName = CameraService::getCurrPackageName();
+            status_t pkgRes = const_cast<CameraMetadata&>(sessionParams).update(
+                    tag, String8(pkgName.c_str()));
+            if (pkgRes) {
+                ALOGE("%s: metadata update failed, res = %d", __FUNCTION__, pkgRes);
+            }
+        }
+    }
+#endif
+
     bool isConstrainedHighSpeed =
             CAMERA_STREAM_CONFIGURATION_CONSTRAINED_HIGH_SPEED_MODE == operatingMode;
 
