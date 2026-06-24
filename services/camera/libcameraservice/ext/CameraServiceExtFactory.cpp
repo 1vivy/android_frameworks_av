@@ -9,6 +9,8 @@ void* CameraServiceExtFactory::sFunctionTable = nullptr;
 void* CameraServiceExtFactory::sExtObject = nullptr;
 int (*CameraServiceExtFactory::sOnTransactFunc)(void*, uint32_t, const Parcel&, Parcel*, uint32_t) = nullptr;
 void (*CameraServiceExtFactory::sSetCameraServiceInstanceFunc)(void*, sp<CameraService>) = nullptr;
+void* CameraServiceExtFactory::sGetExtOpModeFn = nullptr;
+void* CameraServiceExtFactory::sBeforeConfigFn = nullptr;
 
 void CameraServiceExtFactory::ensureLoaded() {
     if (sFunctionTable != nullptr) return;
@@ -74,6 +76,14 @@ void CameraServiceExtFactory::ensureLoaded() {
         ALOGI("CameraServiceExtFactory: setCameraServiceInstance found at %p",
                 sSetCameraServiceInstanceFunc);
     }
+
+    // R4 Depth-2 configure hooks (resolved raw; the caller casts to the typed signature).
+    sGetExtOpModeFn = dlsym(handle,
+            "_ZN7android20CameraServiceExtImpl25getExtensionOperatingModeERKNS_14CameraMetadataEmi");
+    sBeforeConfigFn = dlsym(handle,
+            "_ZN7android20CameraServiceExtImpl28beforeConfigureStreamsLockedERKNS_14CameraMetadataEmNS_7String8ERNS_7camera39StreamSetEi");
+    ALOGI("CameraServiceExtFactory: getExtensionOperatingMode=%p beforeConfigureStreamsLocked=%p",
+            sGetExtOpModeFn, sBeforeConfigFn);
 }
 
 void* CameraServiceExtFactory::getInstance() {
@@ -120,6 +130,25 @@ void CameraServiceExtFactory::setCameraServiceInstance(const sp<CameraService>& 
         return;
     }
     sSetCameraServiceInstanceFunc(extObject, service);
+}
+
+bool CameraServiceExtFactory::isLoaded() {
+    ensureLoaded();
+    return sFunctionTable != nullptr;
+}
+
+void* CameraServiceExtFactory::extObject() {
+    return getExtObject();
+}
+
+void* CameraServiceExtFactory::getExtensionOperatingModeFn() {
+    ensureLoaded();
+    return sGetExtOpModeFn;
+}
+
+void* CameraServiceExtFactory::beforeConfigureStreamsLockedFn() {
+    ensureLoaded();
+    return sBeforeConfigFn;
 }
 
 CameraServiceExtFactory::~CameraServiceExtFactory() {

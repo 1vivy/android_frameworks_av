@@ -62,6 +62,7 @@
 #include <com_android_window_flags.h>
 
 #include "CameraService.h"
+#include "ext/include/CameraServiceExtFactory.h"
 #include "FwkOnlyMetadataTags.h"
 #include "aidl/android/hardware/graphics/common/Dataspace.h"
 #include "aidl/AidlUtils.h"
@@ -2556,6 +2557,42 @@ status_t Camera3Device::configureStreamsLocked(int operatingMode,
     if (!mNeedConfig) {
         ALOGV("%s: Skipping config, no stream changes", __FUNCTION__);
         return OK;
+    }
+
+    // R4 (v2.1+): OEM CameraServiceExt Depth-2 configure hooks, behind the ext-LOADED gate ONLY.
+    // OOS-faithful: OOS gates the configure hook on (config-dirty) + (ext-loaded/vtable-valid), NOT on
+    // auth — the ext self-gates on the com.oplus.packageName stamp already written into sessionParams
+    // (the CAMERA_PACKAGE_NAME block above) + its onTransact auth state (R2-routed). mNeedConfig==true
+    // here IS the config-dirty gate. getExtensionOperatingMode may override op_mode (8K 0x80a9);
+    // beforeConfigureStreamsLocked may retype the StreamSet (EISv2 #8) BEFORE the HAL configure below.
+    // ARG semantics (trailing int = camera id, best-effort) + afterConfigureStreamsLocked are
+    // FLASH-TO-CONFIRM via tools/observability/r4-oem-transact (it traces the live OOS hook args).
+    // See docs/re-notes/oem-ext-depth2-lifecycle-RE.md.
+    if (CameraServiceExtFactory::isLoaded()) {
+        void* ext = CameraServiceExtFactory::extObject();
+        if (ext != nullptr) {
+            const int camId = atoi(mId.c_str());
+            using GetExtOpModeFn = int (*)(void*, const CameraMetadata&, unsigned long, int);
+            using BeforeConfigFn = void (*)(void*, const CameraMetadata&, unsigned long, String8,
+                    camera3::StreamSet&, int);
+            auto getExtOpMode = reinterpret_cast<GetExtOpModeFn>(
+                    CameraServiceExtFactory::getExtensionOperatingModeFn());
+            auto beforeConfig = reinterpret_cast<BeforeConfigFn>(
+                    CameraServiceExtFactory::beforeConfigureStreamsLockedFn());
+            if (getExtOpMode != nullptr) {
+                int extMode = getExtOpMode(ext, sessionParams,
+                        static_cast<unsigned long>(mOperatingMode), camId);
+                if (extMode > 0 && extMode != mOperatingMode) {
+                    ALOGI("%s: OEM ext overrode operating mode 0x%x -> 0x%x",
+                            __FUNCTION__, mOperatingMode, extMode);
+                    mOperatingMode = extMode;
+                }
+            }
+            if (beforeConfig != nullptr) {
+                beforeConfig(ext, sessionParams, static_cast<unsigned long>(mOperatingMode),
+                        String8(mId.c_str()), mOutputStreams, camId);
+            }
+        }
     }
 
     // Workaround for device HALv3.2 or older spec bug - zero streams requires
