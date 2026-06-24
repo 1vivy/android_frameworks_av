@@ -244,6 +244,7 @@ void CameraService::onFirstRef()
     res = enumerateProviders();
     if (res == OK) {
         mInitialized = true;
+        CameraServiceExtFactory::setCameraServiceInstance(sp<CameraService>::fromExisting(this));
     }
 
     mUidPolicy = new UidPolicy(this);

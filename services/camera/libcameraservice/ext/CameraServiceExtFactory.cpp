@@ -1,4 +1,5 @@
 #include "CameraServiceExtFactory.h"
+#include "CameraService.h"
 #include <dlfcn.h>
 #include <log/log.h>
 
@@ -7,6 +8,7 @@ namespace android {
 void* CameraServiceExtFactory::sFunctionTable = nullptr;
 void* CameraServiceExtFactory::sExtObject = nullptr;
 int (*CameraServiceExtFactory::sOnTransactFunc)(void*, uint32_t, const Parcel&, Parcel*, uint32_t) = nullptr;
+void (*CameraServiceExtFactory::sSetCameraServiceInstanceFunc)(void*, sp<CameraService>) = nullptr;
 
 void CameraServiceExtFactory::ensureLoaded() {
     if (sFunctionTable != nullptr) return;
@@ -63,6 +65,15 @@ void CameraServiceExtFactory::ensureLoaded() {
     } else {
         ALOGI("CameraServiceExtFactory: onTransact found at %p", sOnTransactFunc);
     }
+
+    sSetCameraServiceInstanceFunc = (void (*)(void*, sp<CameraService>))
+        dlsym(handle, "_ZN7android20CameraServiceExtImpl24setCameraServiceInstanceENS_2spINS_13CameraServiceEEE");
+    if (sSetCameraServiceInstanceFunc == nullptr) {
+        ALOGE("CameraServiceExtFactory: dlsym setCameraServiceInstance failed: %s", dlerror());
+    } else {
+        ALOGI("CameraServiceExtFactory: setCameraServiceInstance found at %p",
+                sSetCameraServiceInstanceFunc);
+    }
 }
 
 void* CameraServiceExtFactory::getInstance() {
@@ -70,29 +81,45 @@ void* CameraServiceExtFactory::getInstance() {
     return sFunctionTable;   // may be null
 }
 
-int CameraServiceExtFactory::onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags) {
+void* CameraServiceExtFactory::getExtObject() {
     ensureLoaded();
     if (sExtObject == nullptr) {
         if (sFunctionTable == nullptr) {
-            ALOGE("CameraServiceExtFactory::onTransact: extension not loaded");
-            return -1;
+            ALOGE("CameraServiceExtFactory::getExtObject: extension not loaded");
+            return nullptr;
         }
         void* actualFunc = *(void**)sFunctionTable;
-        if (actualFunc == nullptr) return -1;
+        if (actualFunc == nullptr) return nullptr;
         typedef void* (*GetObjectFunc)();
         sExtObject = ((GetObjectFunc)actualFunc)();
         if (sExtObject == nullptr) {
             ALOGE("CameraServiceExtFactory: factory returned null");
-            return -1;
+            return nullptr;
         }
         ALOGI("CameraServiceExtFactory: real extension object at %p", sExtObject);
     }
+    return sExtObject;
+}
 
+int CameraServiceExtFactory::onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags) {
+    void* extObject = getExtObject();
+    if (extObject == nullptr) {
+        return -1;
+    }
     if (sOnTransactFunc == nullptr) {
         ALOGE("CameraServiceExtFactory::onTransact: no function pointer");
         return -1;
     }
-    return sOnTransactFunc(sExtObject, code, data, reply, flags);
+    return sOnTransactFunc(extObject, code, data, reply, flags);
+}
+
+void CameraServiceExtFactory::setCameraServiceInstance(const sp<CameraService>& service) {
+    void* extObject = getExtObject();
+    if (extObject == nullptr || sSetCameraServiceInstanceFunc == nullptr) {
+        ALOGE("CameraServiceExtFactory::setCameraServiceInstance: extension not ready");
+        return;
+    }
+    sSetCameraServiceInstanceFunc(extObject, service);
 }
 
 CameraServiceExtFactory::~CameraServiceExtFactory() {
