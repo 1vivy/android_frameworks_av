@@ -1127,6 +1127,10 @@ status_t StagefrightRecorder::setParameter(
         }
     } else if (key == "log-session-id") {
         return setLogSessionId(value);
+    } else if (key == "OplusUserData") {
+        // [PATCH OPLUSHDR] Record and pass parameter to Muxer
+        mOplusUserData = value.c_str();
+        return OK;
     } else {
         ALOGE("setParameter: failed to find key %s", key.c_str());
     }
@@ -2313,6 +2317,11 @@ void StagefrightRecorder::setupMPEG4orWEBMMetaData(sp<MetaData> *meta) {
     if (mOutputFormat == OUTPUT_FORMAT_MPEG_4 || mOutputFormat == OUTPUT_FORMAT_THREE_GPP) {
         (*meta)->setInt32(kKeyEmptyTrackMalFormed, true);
         (*meta)->setInt32(kKey4BitTrackIds, true);
+    }
+
+    // [PATCH OPLUSHDR] Pass metadata to MPEG4Writer
+    if (!mOplusUserData.empty()) {
+        (*meta)->setCString(kKeyOplusUserData, mOplusUserData.c_str());
     }
 }
 
