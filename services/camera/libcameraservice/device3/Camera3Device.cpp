@@ -2581,8 +2581,12 @@ status_t Camera3Device::configureStreamsLocked(int operatingMode,
                     CameraServiceExtFactory::beforeConfigureStreamsLockedFn());
             if (getExtOpMode != nullptr) {
                 int extMode = getExtOpMode(ext, sessionParams,
-                        static_cast<unsigned long>(mOperatingMode), camId);
-                if (extMode > 0 && extMode != mOperatingMode) {
+                        static_cast<unsigned long>(mOperatingMode), static_cast<int>(mOperatingMode));
+                // R4 v2.2.1 fix: pass current op_mode (NOT camId) as the trailing default arg; only
+                // honor a real OEM vendor-range override (>=0x8000). The v2.2 bug passed camId here,
+                // which getExtensionOperatingMode echoes as its fallback (vendor override-tag absent on
+                // LOS), clobbering op_mode to the camera id (8K cam2->0x2, selfie cam1->0x1; cam0 safe).
+                if (extMode >= 0x8000 && extMode != static_cast<int>(mOperatingMode)) {
                     ALOGI("%s: OEM ext overrode operating mode 0x%x -> 0x%x",
                             __FUNCTION__, mOperatingMode, extMode);
                     mOperatingMode = extMode;
